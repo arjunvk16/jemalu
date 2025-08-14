@@ -26,21 +26,46 @@
 </head>
 <body class="bg-gray-900 text-white flex items-center justify-center min-h-screen p-4">
 
-    <!-- Name Entry Modal -->
-    <div id="name-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+    <!-- Lobby Modal -->
+    <div id="lobby-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
         <div class="bg-gray-800 p-8 rounded-lg shadow-2xl w-full max-w-sm text-center">
-            <h2 class="text-2xl font-bold mb-6">Enter the Game</h2>
+            <h2 class="text-3xl font-bold mb-6 text-indigo-400">Jemalu</h2>
+            <div class="space-y-4">
+                <button id="show-host-modal-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-md transition duration-300">Host New Game</button>
+                <button id="show-join-modal-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-md transition duration-300">Join Existing Game</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Host Name Entry Modal -->
+    <div id="host-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-gray-800 p-8 rounded-lg shadow-2xl w-full max-w-sm text-center">
+            <h2 class="text-2xl font-bold mb-6">Host a Game</h2>
+            <input type="text" id="host-name-input" placeholder="Enter your name" class="w-full bg-gray-700 text-white p-3 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4">
+            <button id="host-game-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-md transition duration-300">Create Game</button>
+        </div>
+    </div>
+
+    <!-- Join Game Modal -->
+    <div id="join-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-gray-800 p-8 rounded-lg shadow-2xl w-full max-w-sm text-center">
+            <h2 class="text-2xl font-bold mb-6">Join a Game</h2>
             <input type="text" id="player-name-input" placeholder="Enter your name" class="w-full bg-gray-700 text-white p-3 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4">
+            <input type="text" id="game-code-input" placeholder="Enter Game Code" class="w-full bg-gray-700 text-white p-3 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4">
             <button id="join-game-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-md transition duration-300">Join Game</button>
         </div>
     </div>
 
+
     <!-- Main Game Container -->
-    <div id="game-container" class="hidden w-full max-w-4xl mx-auto">
+    <div id="game-container" class="hidden w-full max-w-5xl mx-auto">
         <div class="bg-gray-800 rounded-xl shadow-2xl p-6 md:p-8">
             <header class="flex flex-col md:flex-row justify-between items-center mb-6 border-b border-gray-700 pb-4">
                 <h1 class="text-3xl font-bold text-indigo-400">Jemalu</h1>
-                <div id="user-info" class="text-sm text-gray-400 mt-2 md:mt-0"></div>
+                <div class="text-center md:text-right">
+                    <div id="game-code-display" class="text-lg font-semibold text-yellow-400"></div>
+                    <div id="user-info" class="text-sm text-gray-400 mt-1"></div>
+                </div>
             </header>
 
             <main class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -86,14 +111,22 @@
         // --- FIREBASE IMPORTS ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, getDocs, writeBatch, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, getDocs, runTransaction, serverTimestamp, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- DOM ELEMENTS ---
-        const nameModal = document.getElementById('name-modal');
+        const lobbyModal = document.getElementById('lobby-modal');
+        const hostModal = document.getElementById('host-modal');
+        const joinModal = document.getElementById('join-modal');
+        const showHostModalBtn = document.getElementById('show-host-modal-btn');
+        const showJoinModalBtn = document.getElementById('show-join-modal-btn');
+        const hostNameInput = document.getElementById('host-name-input');
+        const hostGameBtn = document.getElementById('host-game-btn');
         const playerNameInput = document.getElementById('player-name-input');
+        const gameCodeInput = document.getElementById('game-code-input');
         const joinGameBtn = document.getElementById('join-game-btn');
         const gameContainer = document.getElementById('game-container');
         const userInfo = document.getElementById('user-info');
+        const gameCodeDisplay = document.getElementById('game-code-display');
         const playersList = document.getElementById('players-list');
         const playerCount = document.getElementById('player-count');
         const becomeHostBtn = document.getElementById('become-host-btn');
@@ -106,7 +139,6 @@
         const toastNotification = document.getElementById('toast-notification');
 
         // --- FIREBASE AND APP CONFIG ---
-        // Hardcoded Firebase config for testing purposes
         const firebaseConfig = {
             apiKey: "AIzaSyAJ9K9fQ0ThMB7aXB6qNHr3_yLUdqJgnCM",
             authDomain: "my-chain-reaction-game.firebaseapp.com",
@@ -120,7 +152,7 @@
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'jemalu-game-default';
         
         let db, auth;
-        let userId, playerName;
+        let userId, playerName, gameId;
         let unsubscribePlayers, unsubscribeGameState;
 
         // --- FIREBASE INITIALIZATION ---
@@ -134,7 +166,6 @@
                     if (user) {
                         userId = user.uid;
                         console.log("Authenticated with User ID:", userId);
-                        userInfo.textContent = `Your ID: ${userId}`;
                     } else {
                         console.log("User not authenticated, signing in...");
                         await authenticateUser();
@@ -143,7 +174,6 @@
 
             } catch (error) {
                 console.error("Firebase initialization failed:", error);
-                // Using a custom toast instead of alert
                 showToast("Could not connect to the game server.");
             }
         }
@@ -156,9 +186,17 @@
              }
         }
 
+        // --- UI FLOW ---
+        showHostModalBtn.addEventListener('click', () => {
+            lobbyModal.classList.add('hidden');
+            hostModal.classList.remove('hidden');
+        });
+        showJoinModalBtn.addEventListener('click', () => {
+            lobbyModal.classList.add('hidden');
+            joinModal.classList.remove('hidden');
+        });
+
         // --- GAME LOGIC ---
-        
-        // Show a temporary message to the user
         function showToast(message) {
             toastNotification.textContent = message;
             toastNotification.classList.remove('hidden');
@@ -169,45 +207,91 @@
             }, 3000);
         }
 
-        // Handle player joining the game
-        async function joinGame() {
-            playerName = playerNameInput.value.trim();
+        async function hostGame() {
+            playerName = hostNameInput.value.trim();
             if (!playerName) {
                 showToast("Please enter a name.");
                 return;
             }
-            if (playerName.length > 15) {
-                showToast("Name must be 15 characters or less.");
+            if (!userId) {
+                showToast("Authentication failed. Please wait and try again.");
                 return;
             }
+            
+            gameId = Math.floor(100000 + Math.random() * 900000).toString();
+            
+            try {
+                const playerDocRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/players`, userId);
+                await setDoc(playerDocRef, {
+                    name: playerName,
+                    joinedAt: serverTimestamp()
+                });
+                
+                const gameStateRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
+                await setDoc(gameStateRef, {
+                    hostId: null,
+                    hostName: null,
+                    phase: 'lobby',
+                    secretWord: null,
+                    selectedPlayerIds: []
+                });
+                
+                enterGameScreen();
+            } catch (error) {
+                console.error("Error hosting game:", error);
+                showToast("Could not host the game. Please try again.");
+            }
+        }
 
+        async function joinGame() {
+            playerName = playerNameInput.value.trim();
+            gameId = gameCodeInput.value.trim();
+
+            if (!playerName || !gameId) {
+                showToast("Please enter your name and a game code.");
+                return;
+            }
             if (!userId) {
                 showToast("Authentication failed. Please wait and try again.");
                 return;
             }
 
             try {
-                const playerDocRef = doc(db, `artifacts/${appId}/public/data/players`, userId);
+                const gameRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
+                const gameDoc = await getDoc(gameRef);
+
+                if (!gameDoc.exists()) {
+                    showToast("Game not found. Check the code and try again.");
+                    return;
+                }
+
+                const playerDocRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/players`, userId);
                 await setDoc(playerDocRef, {
                     name: playerName,
                     joinedAt: serverTimestamp()
                 });
 
-                nameModal.classList.add('hidden');
-                gameContainer.classList.remove('hidden');
-                
-                // Start listening to game state changes
-                listenToGame();
-
+                enterGameScreen();
             } catch (error) {
                 console.error("Error joining game:", error);
                 showToast("Could not join the game. Please try again.");
             }
         }
 
-        // Listen for real-time updates to players and game state
+        function enterGameScreen() {
+            hostModal.classList.add('hidden');
+            joinModal.classList.add('hidden');
+            lobbyModal.classList.add('hidden');
+            gameContainer.classList.remove('hidden');
+            
+            gameCodeDisplay.textContent = `Game Code: ${gameId}`;
+            userInfo.textContent = `Your Name: ${playerName}`;
+
+            listenToGame();
+        }
+
         function listenToGame() {
-            const playersCollectionRef = collection(db, `artifacts/${appId}/public/data/players`);
+            const playersCollectionRef = collection(db, `artifacts/${appId}/public/data/games/${gameId}/players`);
             unsubscribePlayers = onSnapshot(playersCollectionRef, (snapshot) => {
                 const players = [];
                 snapshot.forEach(doc => {
@@ -216,14 +300,13 @@
                 updatePlayersList(players);
             });
             
-            const gameStateDocRef = doc(db, `artifacts/${appId}/public/data/gameState/main`);
+            const gameStateDocRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
             unsubscribeGameState = onSnapshot(gameStateDocRef, (doc) => {
                 const gameState = doc.exists() ? doc.data() : {};
                 updateUI(gameState);
             });
         }
 
-        // Update the list of players in the UI
         function updatePlayersList(players) {
             playersList.innerHTML = '';
             playerCount.textContent = players.length;
@@ -249,26 +332,23 @@
             });
         }
 
-        // Update the entire UI based on the current game state
         function updateUI(gameState) {
             const currentHostId = gameState.hostId || null;
             const isHost = currentHostId === userId;
             document.body.dataset.isHost = isHost;
             
-            // Update host-related UI
             becomeHostBtn.disabled = !!currentHostId;
             resetGameBtn.classList.toggle('hidden', !isHost);
             hostControls.classList.toggle('hidden', !isHost || gameState.phase === 'revealed');
 
             // Refresh player list to show/hide checkboxes
-            const playersCollectionRef = collection(db, `artifacts/${appId}/public/data/players`);
+            const playersCollectionRef = collection(db, `artifacts/${appId}/public/data/games/${gameId}/players`);
             getDocs(playersCollectionRef).then(snapshot => {
                  const players = [];
                 snapshot.forEach(doc => players.push({ id: doc.id, ...doc.data() }));
                 updatePlayersList(players);
             });
 
-            // Update game status and word display
             wordDisplay.innerHTML = '';
             if (!currentHostId) {
                 gameStatus.textContent = "Waiting for a player to become the host.";
@@ -290,11 +370,10 @@
             }
         }
         
-        // Handle a player trying to become the host
         async function becomeHost() {
             if (!userId || !playerName) return;
 
-            const gameStateRef = doc(db, `artifacts/${appId}/public/data/gameState/main`);
+            const gameStateRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
 
             try {
                 await runTransaction(db, async (transaction) => {
@@ -305,12 +384,10 @@
                         showToast("Another player just became the host!");
                         throw new Error("Host already exists.");
                     } else {
-                        transaction.set(gameStateRef, { 
+                        transaction.update(gameStateRef, { 
                             hostId: userId,
                             hostName: playerName,
-                            phase: 'word_selection',
-                            secretWord: '',
-                            selectedPlayerIds: []
+                            phase: 'word_selection'
                         });
                         showToast("You are now the host!");
                     }
@@ -320,7 +397,6 @@
             }
         }
 
-        // Handle the host revealing the word
         async function revealWord() {
             const secretWord = secretWordInput.value.trim();
             if (!secretWord) {
@@ -336,7 +412,7 @@
                 return;
             }
 
-            const gameStateRef = doc(db, `artifacts/${appId}/public/data/gameState/main`);
+            const gameStateRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
             try {
                 await setDoc(gameStateRef, {
                     secretWord: secretWord,
@@ -349,11 +425,9 @@
             }
         }
         
-        // Handle resetting the game
         async function resetGame() {
-            const gameStateRef = doc(db, `artifacts/${appId}/public/data/gameState/main`);
+            const gameStateRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
             try {
-                // We set all fields to null/empty to reset the state
                 await setDoc(gameStateRef, {
                     hostId: null,
                     hostName: null,
@@ -369,12 +443,9 @@
             }
         }
 
-
         // --- EVENT LISTENERS ---
+        hostGameBtn.addEventListener('click', hostGame);
         joinGameBtn.addEventListener('click', joinGame);
-        playerNameInput.addEventListener('keyup', (e) => {
-            if (e.key === 'Enter') joinGame();
-        });
         becomeHostBtn.addEventListener('click', becomeHost);
         resetGameBtn.addEventListener('click', resetGame);
         revealWordBtn.addEventListener('click', revealWord);
