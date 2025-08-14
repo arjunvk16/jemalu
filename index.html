@@ -22,6 +22,13 @@
             90% { opacity: 1; transform: translateY(0); }
             100% { opacity: 0; transform: translateY(-20px); }
         }
+        .vote-button {
+            transition: all 0.2s ease-in-out;
+        }
+        .vote-button:not(:disabled):hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.5);
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white flex items-center justify-center min-h-screen p-4">
@@ -58,12 +65,12 @@
 
 
     <!-- Main Game Container -->
-    <div id="game-container" class="hidden w-full max-w-5xl mx-auto">
+    <div id="game-container" class="hidden w-full max-w-5xl mx-auto" data-phase="lobby">
         <div class="bg-gray-800 rounded-xl shadow-2xl p-6 md:p-8">
             <header class="flex flex-col md:flex-row justify-between items-center mb-6 border-b border-gray-700 pb-4">
                 <h1 class="text-3xl font-bold text-indigo-400">Jemalu</h1>
                 <div class="text-center md:text-right">
-                    <div id="game-code-display" class="text-lg font-semibold text-yellow-400"></div>
+                    <div id="game-code-display" class="text-lg font-semibold text-yellow-400 cursor-pointer" title="Click to copy"></div>
                     <div id="user-info" class="text-sm text-gray-400 mt-1"></div>
                 </div>
             </header>
@@ -78,7 +85,7 @@
                 </div>
 
                 <!-- Game Area -->
-                <div class="md:col-span-2 bg-gray-900/50 p-6 rounded-lg flex flex-col items-center justify-center min-h-[300px]">
+                <div id="game-area" class="md:col-span-2 bg-gray-900/50 p-6 rounded-lg flex flex-col items-center justify-center min-h-[300px]">
                     <!-- Word Display -->
                     <div id="word-display-container" class="text-center">
                         <p id="game-status" class="text-gray-400 mb-4">Welcome! Waiting for a host...</p>
@@ -93,11 +100,28 @@
                         </div>
                         <button id="reveal-word-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-md transition duration-300">Reveal Word to Selected</button>
                     </div>
+
+                    <!-- Voting Area -->
+                    <div id="voting-container" class="hidden w-full text-center">
+                        <h3 class="text-2xl font-bold mb-4">Who is the Kallan?</h3>
+                        <div id="voting-players-list" class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                            <!-- Voting buttons go here -->
+                        </div>
+                    </div>
+
+                    <!-- Results Area -->
+                    <div id="results-container" class="hidden w-full text-center">
+                        <h3 class="text-3xl font-bold mb-4" id="results-title"></h3>
+                        <p class="text-lg mb-6" id="results-subtitle"></p>
+                        <div id="results-details" class="text-left bg-gray-800 p-4 rounded-lg"></div>
+                    </div>
+
                 </div>
             </main>
 
             <footer class="mt-6 pt-4 border-t border-gray-700 flex flex-col md:flex-row items-center justify-center gap-4">
                  <button id="become-host-btn" class="bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold py-2 px-6 rounded-md transition duration-300 disabled:bg-gray-600 disabled:cursor-not-allowed">Become Host</button>
+                 <button id="start-voting-btn" class="hidden bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-md transition duration-300">Start Voting</button>
                  <button id="reset-game-btn" class="hidden bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-md transition duration-300">Reset Game</button>
             </footer>
         </div>
@@ -111,7 +135,7 @@
         // --- FIREBASE IMPORTS ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, getDocs, runTransaction, serverTimestamp, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, getDocs, runTransaction, serverTimestamp, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- DOM ELEMENTS ---
         const lobbyModal = document.getElementById('lobby-modal');
@@ -129,13 +153,22 @@
         const gameCodeDisplay = document.getElementById('game-code-display');
         const playersList = document.getElementById('players-list');
         const playerCount = document.getElementById('player-count');
+        const gameArea = document.getElementById('game-area');
         const becomeHostBtn = document.getElementById('become-host-btn');
+        const startVotingBtn = document.getElementById('start-voting-btn');
         const resetGameBtn = document.getElementById('reset-game-btn');
         const hostControls = document.getElementById('host-controls');
         const secretWordInput = document.getElementById('secret-word-input');
         const revealWordBtn = document.getElementById('reveal-word-btn');
         const gameStatus = document.getElementById('game-status');
+        const wordDisplayContainer = document.getElementById('word-display-container');
         const wordDisplay = document.getElementById('word-display');
+        const votingContainer = document.getElementById('voting-container');
+        const votingPlayersList = document.getElementById('voting-players-list');
+        const resultsContainer = document.getElementById('results-container');
+        const resultsTitle = document.getElementById('results-title');
+        const resultsSubtitle = document.getElementById('results-subtitle');
+        const resultsDetails = document.getElementById('results-details');
         const toastNotification = document.getElementById('toast-notification');
 
         // --- FIREBASE AND APP CONFIG ---
@@ -153,6 +186,7 @@
         
         let db, auth;
         let userId, playerName, gameId;
+        let allPlayers = [];
         let unsubscribePlayers, unsubscribeGameState;
 
         // --- FIREBASE INITIALIZATION ---
@@ -165,9 +199,7 @@
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
-                        console.log("Authenticated with User ID:", userId);
                     } else {
-                        console.log("User not authenticated, signing in...");
                         await authenticateUser();
                     }
                 });
@@ -186,102 +218,59 @@
              }
         }
 
-        // --- UI FLOW ---
-        showHostModalBtn.addEventListener('click', () => {
-            lobbyModal.classList.add('hidden');
-            hostModal.classList.remove('hidden');
-        });
-        showJoinModalBtn.addEventListener('click', () => {
-            lobbyModal.classList.add('hidden');
-            joinModal.classList.remove('hidden');
-        });
-
-        // --- GAME LOGIC ---
+        // --- UI FLOW & GAME LOGIC ---
         function showToast(message) {
             toastNotification.textContent = message;
-            toastNotification.classList.remove('hidden');
+            toastNotification.classList.remove('hidden', 'toast');
+            void toastNotification.offsetWidth; // Trigger reflow
             toastNotification.classList.add('toast');
-            setTimeout(() => {
-                toastNotification.classList.add('hidden');
-                toastNotification.classList.remove('toast');
-            }, 3000);
         }
 
         async function hostGame() {
             playerName = hostNameInput.value.trim();
-            if (!playerName) {
-                showToast("Please enter a name.");
-                return;
-            }
-            if (!userId) {
-                showToast("Authentication failed. Please wait and try again.");
-                return;
-            }
+            if (!playerName) return showToast("Please enter a name.");
+            if (!userId) return showToast("Authentication failed. Please wait.");
             
             gameId = Math.floor(100000 + Math.random() * 900000).toString();
             
             try {
-                const playerDocRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/players`, userId);
-                await setDoc(playerDocRef, {
-                    name: playerName,
-                    joinedAt: serverTimestamp()
-                });
-                
                 const gameStateRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
                 await setDoc(gameStateRef, {
-                    hostId: null,
-                    hostName: null,
                     phase: 'lobby',
-                    secretWord: null,
-                    selectedPlayerIds: []
+                    createdAt: serverTimestamp()
                 });
-                
-                enterGameScreen();
+                await joinGame(true);
             } catch (error) {
                 console.error("Error hosting game:", error);
-                showToast("Could not host the game. Please try again.");
+                showToast("Could not host the game.");
             }
         }
 
-        async function joinGame() {
-            playerName = playerNameInput.value.trim();
-            gameId = gameCodeInput.value.trim();
-
-            if (!playerName || !gameId) {
-                showToast("Please enter your name and a game code.");
-                return;
+        async function joinGame(isHosting = false) {
+            if (!isHosting) {
+                playerName = playerNameInput.value.trim();
+                gameId = gameCodeInput.value.trim();
+                if (!playerName || !gameId) return showToast("Please enter name and game code.");
             }
-            if (!userId) {
-                showToast("Authentication failed. Please wait and try again.");
-                return;
-            }
+            if (!userId) return showToast("Authentication failed. Please wait.");
 
             try {
                 const gameRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
                 const gameDoc = await getDoc(gameRef);
-
-                if (!gameDoc.exists()) {
-                    showToast("Game not found. Check the code and try again.");
-                    return;
-                }
+                if (!gameDoc.exists()) return showToast("Game not found.");
 
                 const playerDocRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/players`, userId);
-                await setDoc(playerDocRef, {
-                    name: playerName,
-                    joinedAt: serverTimestamp()
-                });
+                await setDoc(playerDocRef, { name: playerName, joinedAt: serverTimestamp() });
 
                 enterGameScreen();
             } catch (error) {
                 console.error("Error joining game:", error);
-                showToast("Could not join the game. Please try again.");
+                showToast("Could not join the game.");
             }
         }
 
         function enterGameScreen() {
-            hostModal.classList.add('hidden');
-            joinModal.classList.add('hidden');
-            lobbyModal.classList.add('hidden');
+            [lobbyModal, hostModal, joinModal].forEach(el => el.classList.add('hidden'));
             gameContainer.classList.remove('hidden');
             
             gameCodeDisplay.textContent = `Game Code: ${gameId}`;
@@ -291,41 +280,43 @@
         }
 
         function listenToGame() {
+            // Listener for player changes
             const playersCollectionRef = collection(db, `artifacts/${appId}/public/data/games/${gameId}/players`);
             unsubscribePlayers = onSnapshot(playersCollectionRef, (snapshot) => {
-                const players = [];
-                snapshot.forEach(doc => {
-                    players.push({ id: doc.id, ...doc.data() });
-                });
-                updatePlayersList(players);
+                allPlayers = [];
+                snapshot.forEach(doc => allPlayers.push({ id: doc.id, ...doc.data() }));
+                updatePlayersList(); // Update the list whenever players join/leave
             });
             
+            // Listener for game state changes
             const gameStateDocRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
             unsubscribeGameState = onSnapshot(gameStateDocRef, (doc) => {
                 const gameState = doc.exists() ? doc.data() : {};
-                updateUI(gameState);
+                updateUI(gameState); // Update the main UI based on game state
             });
         }
 
-        function updatePlayersList(players) {
+        function updatePlayersList() {
             playersList.innerHTML = '';
-            playerCount.textContent = players.length;
+            playerCount.textContent = allPlayers.length;
+            const sortedPlayers = [...allPlayers].sort((a, b) => a.name.localeCompare(b.name));
             
             const isHost = document.body.dataset.isHost === 'true';
+            const phase = gameContainer.dataset.phase;
 
-            players.sort((a, b) => a.name.localeCompare(b.name));
-
-            players.forEach(p => {
+            sortedPlayers.forEach(p => {
                 const playerElement = document.createElement('div');
                 playerElement.className = 'flex items-center justify-between bg-gray-700 p-2 rounded-md';
-                
+                const isYou = p.id === userId;
+
                 let checkboxHTML = '';
-                if (isHost && p.id !== userId) {
+                // Only show checkboxes for the host during the word selection phase
+                if (isHost && phase === 'word_selection' && p.id !== userId) {
                     checkboxHTML = `<input type="checkbox" data-player-id="${p.id}" class="player-checkbox form-checkbox h-5 w-5 bg-gray-800 border-gray-600 rounded text-indigo-500 focus:ring-indigo-500">`;
                 }
 
                 playerElement.innerHTML = `
-                    <span class="font-medium ${p.id === userId ? 'text-yellow-300' : ''}">${p.name} ${p.id === userId ? '(You)' : ''}</span>
+                    <span class="font-medium ${isYou ? 'text-yellow-300' : ''}">${p.name} ${isYou ? '(You)' : ''}</span>
                     ${checkboxHTML}
                 `;
                 playersList.appendChild(playerElement);
@@ -333,107 +324,220 @@
         }
 
         function updateUI(gameState) {
-            const currentHostId = gameState.hostId || null;
-            const isHost = currentHostId === userId;
+            const isHost = gameState.hostId === userId;
             document.body.dataset.isHost = isHost;
-            
-            becomeHostBtn.disabled = !!currentHostId;
+            gameContainer.dataset.phase = gameState.phase || 'lobby';
+
+            // Re-render player list to show/hide checkboxes based on new phase
+            updatePlayersList();
+
+            // Manage visibility of main sections
+            [hostControls, wordDisplayContainer, votingContainer, resultsContainer, startVotingBtn].forEach(el => el.classList.add('hidden'));
+            becomeHostBtn.disabled = !!gameState.hostId;
             resetGameBtn.classList.toggle('hidden', !isHost);
-            hostControls.classList.toggle('hidden', !isHost || gameState.phase === 'revealed');
 
-            // Refresh player list to show/hide checkboxes
-            const playersCollectionRef = collection(db, `artifacts/${appId}/public/data/games/${gameId}/players`);
-            getDocs(playersCollectionRef).then(snapshot => {
-                 const players = [];
-                snapshot.forEach(doc => players.push({ id: doc.id, ...doc.data() }));
-                updatePlayersList(players);
-            });
-
-            wordDisplay.innerHTML = '';
-            if (!currentHostId) {
-                gameStatus.textContent = "Waiting for a player to become the host.";
-            } else if (gameState.phase === 'revealed') {
-                const amISelected = gameState.selectedPlayerIds?.includes(userId);
-                if (isHost || amISelected) {
-                    gameStatus.textContent = `The secret word was:`;
-                    wordDisplay.textContent = gameState.secretWord;
-                } else {
-                    gameStatus.textContent = `You were not selected. The word was for others.`;
-                    wordDisplay.textContent = "Kallan";
-                }
-            } else {
-                if (isHost) {
-                    gameStatus.textContent = "You are the host. Enter a word and select players.";
-                } else {
-                    gameStatus.textContent = `Waiting for ${gameState.hostName || 'the host'} to set a word...`;
-                }
+            switch (gameState.phase) {
+                case 'lobby':
+                    wordDisplayContainer.classList.remove('hidden');
+                    gameStatus.textContent = gameState.hostId ? `Waiting for ${gameState.hostName} to set a word...` : "Waiting for a player to become host.";
+                    wordDisplay.textContent = '';
+                    break;
+                case 'word_selection':
+                    if (isHost) hostControls.classList.remove('hidden');
+                    wordDisplayContainer.classList.remove('hidden');
+                    gameStatus.textContent = isHost ? "Enter a word and select players." : `Waiting for ${gameState.hostName} to set a word...`;
+                    wordDisplay.textContent = '';
+                    break;
+                case 'revealed':
+                    wordDisplayContainer.classList.remove('hidden');
+                    if (isHost) startVotingBtn.classList.remove('hidden');
+                    const amISelected = gameState.selectedPlayerIds?.includes(userId);
+                    if (isHost || amISelected) {
+                        gameStatus.textContent = `The secret word was:`;
+                        wordDisplay.textContent = gameState.secretWord;
+                    } else {
+                        gameStatus.textContent = `You are a Kallan!`;
+                        wordDisplay.textContent = "••••••";
+                    }
+                    break;
+                case 'voting':
+                    votingContainer.classList.remove('hidden');
+                    renderVotingList(gameState);
+                    break;
+                case 'results':
+                    resultsContainer.classList.remove('hidden');
+                    renderResults(gameState);
+                    break;
             }
         }
         
+        function renderVotingList(gameState) {
+            votingPlayersList.innerHTML = '';
+            const myVote = gameState.votes?.[userId];
+            const playersWhoHaveVoted = Object.keys(gameState.votes || {});
+            const votablePlayers = allPlayers.filter(p => p.id !== gameState.hostId);
+
+            votablePlayers.forEach(p => {
+                const button = document.createElement('button');
+                button.textContent = p.name;
+                button.dataset.playerId = p.id;
+                button.className = 'vote-button w-full p-3 rounded-md bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-500 disabled:opacity-75 disabled:cursor-not-allowed';
+                button.disabled = !!myVote || p.id === userId; // Can't vote for yourself
+                if (p.id === userId) button.textContent = "You";
+
+                if (myVote === p.id) {
+                    button.classList.replace('bg-indigo-600', 'bg-green-600');
+                    button.textContent = `Voted for ${p.name}`;
+                }
+                button.addEventListener('click', () => castVote(p.id));
+                votingPlayersList.appendChild(button);
+            });
+            // Total voters are all players except the host
+            const totalVoters = allPlayers.length - 1;
+            gameStatus.textContent = `Votes cast: ${playersWhoHaveVoted.length} / ${totalVoters}`;
+        }
+
+        function renderResults(gameState) {
+            resultsTitle.textContent = gameState.results.title;
+            resultsSubtitle.textContent = gameState.results.subtitle;
+            
+            let detailsHTML = '<ul>';
+            const voteCounts = gameState.results.voteCounts;
+            for (const playerId in voteCounts) {
+                if (voteCounts.hasOwnProperty(playerId)) {
+                    const playerName = allPlayers.find(p => p.id === playerId)?.name || 'Unknown';
+                    const isKallan = gameState.kallanPlayerIds.includes(playerId);
+                    detailsHTML += `<li class="mb-1"><span class="font-bold">${playerName}</span> received ${voteCounts[playerId]} vote(s) ${isKallan ? '<span class="text-red-400 font-semibold">(Kallan)</span>' : ''}</li>`;
+                }
+            }
+            detailsHTML += '</ul>';
+            resultsDetails.innerHTML = detailsHTML;
+        }
+
         async function becomeHost() {
             if (!userId || !playerName) return;
-
             const gameStateRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
-
             try {
                 await runTransaction(db, async (transaction) => {
                     const gameStateDoc = await transaction.get(gameStateRef);
-                    const currentHostId = gameStateDoc.exists() ? gameStateDoc.data().hostId : null;
-
-                    if (currentHostId) {
-                        showToast("Another player just became the host!");
-                        throw new Error("Host already exists.");
-                    } else {
-                        transaction.update(gameStateRef, { 
-                            hostId: userId,
-                            hostName: playerName,
-                            phase: 'word_selection'
-                        });
-                        showToast("You are now the host!");
-                    }
+                    if (gameStateDoc.data().hostId) throw new Error("Host already exists.");
+                    transaction.update(gameStateRef, { hostId: userId, hostName: playerName, phase: 'word_selection' });
                 });
+                showToast("You are now the host!");
             } catch (error) {
+                showToast("Another player just became host!");
                 console.error("Failed to become host:", error.message);
             }
         }
 
         async function revealWord() {
             const secretWord = secretWordInput.value.trim();
-            if (!secretWord) {
-                showToast("Please enter a secret word.");
-                return;
-            }
+            if (!secretWord) return showToast("Please enter a secret word.");
 
             const selectedCheckboxes = document.querySelectorAll('.player-checkbox:checked');
             const selectedPlayerIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.playerId);
+            if (selectedPlayerIds.length === 0) return showToast("Please select at least one player.");
 
-            if (selectedPlayerIds.length === 0) {
-                showToast("Please select at least one player.");
-                return;
-            }
+            const allPlayerIds = allPlayers.map(p => p.id);
+            // Kallans are players who are not the host and not selected
+            const kallanPlayerIds = allPlayerIds.filter(id => id !== userId && !selectedPlayerIds.includes(id));
 
             const gameStateRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
             try {
-                await setDoc(gameStateRef, {
-                    secretWord: secretWord,
-                    selectedPlayerIds: selectedPlayerIds,
-                    phase: 'revealed'
-                }, { merge: true });
+                await updateDoc(gameStateRef, {
+                    secretWord,
+                    selectedPlayerIds,
+                    kallanPlayerIds,
+                    phase: 'revealed',
+                    votes: {}
+                });
             } catch (error) {
                 console.error("Error revealing word:", error);
                 showToast("Could not reveal the word.");
             }
         }
+
+        async function startVoting() {
+            const gameStateRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
+            await updateDoc(gameStateRef, { phase: 'voting' });
+        }
+
+        async function castVote(votedForPlayerId) {
+            const gameStateRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const gameStateDoc = await transaction.get(gameStateRef);
+                    if (!gameStateDoc.exists()) throw new Error("Game state not found.");
+                    
+                    const gameState = gameStateDoc.data();
+                    if (gameState.votes[userId]) throw new Error("Already voted.");
+
+                    const newVotes = { ...gameState.votes, [userId]: votedForPlayerId };
+                    transaction.update(gameStateRef, { votes: newVotes });
+
+                    // Check if all non-host players have voted
+                    const totalVoters = allPlayers.length - 1;
+                    if (Object.keys(newVotes).length >= totalVoters) {
+                        calculateAndSetResults(gameState, newVotes, transaction, gameStateRef);
+                    }
+                });
+            } catch (error) {
+                showToast(error.message);
+                console.error("Error casting vote:", error);
+            }
+        }
+
+        function calculateAndSetResults(gameState, votes, transaction, ref) {
+            const voteCounts = {};
+            for (const voterId in votes) {
+                const votedForId = votes[voterId];
+                voteCounts[votedForId] = (voteCounts[votedForId] || 0) + 1;
+            }
+
+            let maxVotes = 0;
+            let mostVotedPlayerIds = [];
+            for (const playerId in voteCounts) {
+                if (voteCounts[playerId] > maxVotes) {
+                    maxVotes = voteCounts[playerId];
+                    mostVotedPlayerIds = [playerId];
+                } else if (voteCounts[playerId] === maxVotes) {
+                    mostVotedPlayerIds.push(playerId);
+                }
+            }
+
+            const kallanPlayerIds = gameState.kallanPlayerIds || [];
+            const wasKallanCaught = mostVotedPlayerIds.some(id => kallanPlayerIds.includes(id));
+            
+            let results = {};
+            if (wasKallanCaught) {
+                const caughtKallanIds = mostVotedPlayerIds.filter(id => kallanPlayerIds.includes(id));
+                const caughtKallanNames = caughtKallanIds.map(id => allPlayers.find(p => p.id === id)?.name).join(', ');
+                results = {
+                    title: `${caughtKallanNames} caught!`,
+                    subtitle: "The Kallans have lost the game.",
+                    voteCounts
+                };
+            } else {
+                const kallanNames = kallanPlayerIds.map(id => allPlayers.find(p => p.id === id)?.name).join(', ');
+                const title = kallanPlayerIds.length > 1 ? `${kallanNames} Win!` : `${kallanNames} Wins!`;
+                const subtitle = kallanPlayerIds.length > 1 ? "The Kallans successfully deceived everyone." : "The Kallan successfully deceived everyone.";
+                results = {
+                    title: title,
+                    subtitle: subtitle,
+                    voteCounts
+                };
+            }
+
+            transaction.update(ref, { phase: 'results', results });
+        }
         
         async function resetGame() {
             const gameStateRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
             try {
-                await setDoc(gameStateRef, {
-                    hostId: null,
-                    hostName: null,
-                    phase: 'lobby',
-                    secretWord: null,
-                    selectedPlayerIds: []
+                await updateDoc(gameStateRef, {
+                    hostId: null, hostName: null, phase: 'lobby',
+                    secretWord: null, selectedPlayerIds: [], kallanPlayerIds: [],
+                    votes: {}, results: null
                 });
                 secretWordInput.value = '';
                 showToast("Game has been reset.");
@@ -445,10 +549,14 @@
 
         // --- EVENT LISTENERS ---
         hostGameBtn.addEventListener('click', hostGame);
-        joinGameBtn.addEventListener('click', joinGame);
+        joinGameBtn.addEventListener('click', () => joinGame(false));
         becomeHostBtn.addEventListener('click', becomeHost);
         resetGameBtn.addEventListener('click', resetGame);
         revealWordBtn.addEventListener('click', revealWord);
+        startVotingBtn.addEventListener('click', startVoting);
+        gameCodeDisplay.addEventListener('click', () => {
+            navigator.clipboard.writeText(gameId).then(() => showToast('Game code copied!'));
+        });
         
         // --- INITIALIZE ---
         window.onload = initializeFirebase;
