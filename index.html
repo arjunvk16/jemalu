@@ -106,9 +106,18 @@
         const toastNotification = document.getElementById('toast-notification');
 
         // --- FIREBASE AND APP CONFIG ---
-        // These variables are provided by the environment.
+        // Hardcoded Firebase config for testing purposes
+        const firebaseConfig = {
+            apiKey: "AIzaSyAJ9K9fQ0ThMB7aXB6qNHr3_yLUdqJgnCM",
+            authDomain: "my-chain-reaction-game.firebaseapp.com",
+            projectId: "my-chain-reaction-game",
+            storageBucket: "my-chain-reaction-game.appspot.com",
+            messagingSenderId: "32751418407",
+            appId: "1:32751418407:web:ff8244007ef2b099d56202",
+            measurementId: "G-D6ZRG8LK2H"
+        };
+        
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'kallan-game-default';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { /* Default config for local testing */ };
         
         let db, auth;
         let userId, playerName;
@@ -134,7 +143,8 @@
 
             } catch (error) {
                 console.error("Firebase initialization failed:", error);
-                alert("Could not connect to the game server. Please refresh the page.");
+                // Using a custom toast instead of alert
+                showToast("Could not connect to the game server.");
             }
         }
 
