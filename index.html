@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kallan - The Word Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .hidden {
+            display: none;
+        }
+        .toast {
+            animation: fade-in-out 3s ease-in-out forwards;
+        }
+        @keyframes fade-in-out {
+            0% { opacity: 0; transform: translateY(20px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-20px); }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen p-4">
+
+    <!-- Name Entry Modal -->
+    <div id="name-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-gray-800 p-8 rounded-lg shadow-2xl w-full max-w-sm text-center">
+            <h2 class="text-2xl font-bold mb-6">Enter the Game</h2>
+            <input type="text" id="player-name-input" placeholder="Enter your name" class="w-full bg-gray-700 text-white p-3 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4">
+            <button id="join-game-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-md transition duration-300">Join Game</button>
+        </div>
+    </div>
+
+    <!-- Main Game Container -->
+    <div id="game-container" class="hidden w-full max-w-4xl mx-auto">
+        <div class="bg-gray-800 rounded-xl shadow-2xl p-6 md:p-8">
+            <header class="flex flex-col md:flex-row justify-between items-center mb-6 border-b border-gray-700 pb-4">
+                <h1 class="text-3xl font-bold text-indigo-400">Kallan - The Word Game</h1>
+                <div id="user-info" class="text-sm text-gray-400 mt-2 md:mt-0"></div>
+            </header>
+
+            <main class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Players List -->
+                <div class="md:col-span-1 bg-gray-900/50 p-4 rounded-lg">
+                    <h2 class="text-xl font-semibold mb-4">Players (<span id="player-count">0</span>/20)</h2>
+                    <div id="players-list" class="space-y-2 max-h-96 overflow-y-auto">
+                        <!-- Player items will be injected here -->
+                    </div>
+                </div>
+
+                <!-- Game Area -->
+                <div class="md:col-span-2 bg-gray-900/50 p-6 rounded-lg flex flex-col items-center justify-center min-h-[300px]">
+                    <!-- Word Display -->
+                    <div id="word-display-container" class="text-center">
+                        <p id="game-status" class="text-gray-400 mb-4">Welcome! Waiting for a host...</p>
+                        <div id="word-display" class="text-5xl md:text-7xl font-bold tracking-widest text-yellow-400 break-all"></div>
+                    </div>
+
+                    <!-- Host Controls -->
+                    <div id="host-controls" class="hidden w-full mt-4 space-y-4">
+                        <div>
+                           <label for="secret-word-input" class="block text-sm font-medium text-gray-300 mb-1">Enter Secret Word:</label>
+                           <input type="text" id="secret-word-input" class="w-full bg-gray-700 text-white p-3 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <button id="reveal-word-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-md transition duration-300">Reveal Word to Selected</button>
+                    </div>
+                </div>
+            </main>
+
+            <footer class="mt-6 pt-4 border-t border-gray-700 flex flex-col md:flex-row items-center justify-center gap-4">
+                 <button id="become-host-btn" class="bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold py-2 px-6 rounded-md transition duration-300 disabled:bg-gray-600 disabled:cursor-not-allowed">Become Host</button>
+                 <button id="reset-game-btn" class="hidden bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-md transition duration-300">Reset Game</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast-notification" class="hidden fixed bottom-5 right-5 bg-indigo-600 text-white py-2 px-4 rounded-lg shadow-lg"></div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // --- FIREBASE IMPORTS ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, getDocs, writeBatch, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- DOM ELEMENTS ---
+        const nameModal = document.getElementById('name-modal');
+        const playerNameInput = document.getElementById('player-name-input');
+        const joinGameBtn = document.getElementById('join-game-btn');
+        const gameContainer = document.getElementById('game-container');
+        const userInfo = document.getElementById('user-info');
+        const playersList = document.getElementById('players-list');
+        const playerCount = document.getElementById('player-count');
+        const becomeHostBtn = document.getElementById('become-host-btn');
+        const resetGameBtn = document.getElementById('reset-game-btn');
+        const hostControls = document.getElementById('host-controls');
+        const secretWordInput = document.getElementById('secret-word-input');
+        const revealWordBtn = document.getElementById('reveal-word-btn');
+        const gameStatus = document.getElementById('game-status');
+        const wordDisplay = document.getElementById('word-display');
+        const toastNotification = document.getElementById('toast-notification');
+
+        // --- FIREBASE AND APP CONFIG ---
+        // These variables are provided by the environment.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'kallan-game-default';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { /* Default config for local testing */ };
+        
+        let db, auth;
+        let userId, playerName;
+        let unsubscribePlayers, unsubscribeGameState;
+
+        // --- FIREBASE INITIALIZATION ---
+        async function initializeFirebase() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        console.log("Authenticated with User ID:", userId);
+                        userInfo.textContent = `Your ID: ${userId}`;
+                    } else {
+                        console.log("User not authenticated, signing in...");
+                        await authenticateUser();
+                    }
+                });
+
+            } catch (error) {
+                console.error("Firebase initialization failed:", error);
+                alert("Could not connect to the game server. Please refresh the page.");
+            }
+        }
+
+        async function authenticateUser() {
+             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await signInWithCustomToken(auth, __initial_auth_token);
+             } else {
+                await signInAnonymously(auth);
+             }
+        }
+
+        // --- GAME LOGIC ---
+        
+        // Show a temporary message to the user
+        function showToast(message) {
+            toastNotification.textContent = message;
+            toastNotification.classList.remove('hidden');
+            toastNotification.classList.add('toast');
+            setTimeout(() => {
+                toastNotification.classList.add('hidden');
+                toastNotification.classList.remove('toast');
+            }, 3000);
+        }
+
+        // Handle player joining the game
+        async function joinGame() {
+            playerName = playerNameInput.value.trim();
+            if (!playerName) {
+                showToast("Please enter a name.");
+                return;
+            }
+            if (playerName.length > 15) {
+                showToast("Name must be 15 characters or less.");
+                return;
+            }
+
+            if (!userId) {
+                showToast("Authentication failed. Please wait and try again.");
+                return;
+            }
+
+            try {
+                const playerDocRef = doc(db, `artifacts/${appId}/public/data/players`, userId);
+                await setDoc(playerDocRef, {
+                    name: playerName,
+                    joinedAt: serverTimestamp()
+                });
+
+                nameModal.classList.add('hidden');
+                gameContainer.classList.remove('hidden');
+                
+                // Start listening to game state changes
+                listenToGame();
+
+            } catch (error) {
+                console.error("Error joining game:", error);
+                showToast("Could not join the game. Please try again.");
+            }
+        }
+
+        // Listen for real-time updates to players and game state
+        function listenToGame() {
+            const playersCollectionRef = collection(db, `artifacts/${appId}/public/data/players`);
+            unsubscribePlayers = onSnapshot(playersCollectionRef, (snapshot) => {
+                const players = [];
+                snapshot.forEach(doc => {
+                    players.push({ id: doc.id, ...doc.data() });
+                });
+                updatePlayersList(players);
+            });
+            
+            const gameStateDocRef = doc(db, `artifacts/${appId}/public/data/gameState/main`);
+            unsubscribeGameState = onSnapshot(gameStateDocRef, (doc) => {
+                const gameState = doc.exists() ? doc.data() : {};
+                updateUI(gameState);
+            });
+        }
+
+        // Update the list of players in the UI
+        function updatePlayersList(players) {
+            playersList.innerHTML = '';
+            playerCount.textContent = players.length;
+            
+            const isHost = document.body.dataset.isHost === 'true';
+
+            players.sort((a, b) => a.name.localeCompare(b.name));
+
+            players.forEach(p => {
+                const playerElement = document.createElement('div');
+                playerElement.className = 'flex items-center justify-between bg-gray-700 p-2 rounded-md';
+                
+                let checkboxHTML = '';
+                if (isHost && p.id !== userId) {
+                    checkboxHTML = `<input type="checkbox" data-player-id="${p.id}" class="player-checkbox form-checkbox h-5 w-5 bg-gray-800 border-gray-600 rounded text-indigo-500 focus:ring-indigo-500">`;
+                }
+
+                playerElement.innerHTML = `
+                    <span class="font-medium ${p.id === userId ? 'text-yellow-300' : ''}">${p.name} ${p.id === userId ? '(You)' : ''}</span>
+                    ${checkboxHTML}
+                `;
+                playersList.appendChild(playerElement);
+            });
+        }
+
+        // Update the entire UI based on the current game state
+        function updateUI(gameState) {
+            const currentHostId = gameState.hostId || null;
+            const isHost = currentHostId === userId;
+            document.body.dataset.isHost = isHost;
+            
+            // Update host-related UI
+            becomeHostBtn.disabled = !!currentHostId;
+            resetGameBtn.classList.toggle('hidden', !isHost);
+            hostControls.classList.toggle('hidden', !isHost || gameState.phase === 'revealed');
+
+            // Refresh player list to show/hide checkboxes
+            const playersCollectionRef = collection(db, `artifacts/${appId}/public/data/players`);
+            getDocs(playersCollectionRef).then(snapshot => {
+                 const players = [];
+                snapshot.forEach(doc => players.push({ id: doc.id, ...doc.data() }));
+                updatePlayersList(players);
+            });
+
+            // Update game status and word display
+            wordDisplay.innerHTML = '';
+            if (!currentHostId) {
+                gameStatus.textContent = "Waiting for a player to become the host.";
+            } else if (gameState.phase === 'revealed') {
+                const amISelected = gameState.selectedPlayerIds?.includes(userId);
+                if (isHost || amISelected) {
+                    gameStatus.textContent = `The secret word was:`;
+                    wordDisplay.textContent = gameState.secretWord;
+                } else {
+                    gameStatus.textContent = `You were not selected. The word was for others.`;
+                    wordDisplay.textContent = "Kallan";
+                }
+            } else {
+                if (isHost) {
+                    gameStatus.textContent = "You are the host. Enter a word and select players.";
+                } else {
+                    gameStatus.textContent = `Waiting for ${gameState.hostName || 'the host'} to set a word...`;
+                }
+            }
+        }
+        
+        // Handle a player trying to become the host
+        async function becomeHost() {
+            if (!userId || !playerName) return;
+
+            const gameStateRef = doc(db, `artifacts/${appId}/public/data/gameState/main`);
+
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const gameStateDoc = await transaction.get(gameStateRef);
+                    const currentHostId = gameStateDoc.exists() ? gameStateDoc.data().hostId : null;
+
+                    if (currentHostId) {
+                        showToast("Another player just became the host!");
+                        throw new Error("Host already exists.");
+                    } else {
+                        transaction.set(gameStateRef, { 
+                            hostId: userId,
+                            hostName: playerName,
+                            phase: 'word_selection',
+                            secretWord: '',
+                            selectedPlayerIds: []
+                        });
+                        showToast("You are now the host!");
+                    }
+                });
+            } catch (error) {
+                console.error("Failed to become host:", error.message);
+            }
+        }
+
+        // Handle the host revealing the word
+        async function revealWord() {
+            const secretWord = secretWordInput.value.trim();
+            if (!secretWord) {
+                showToast("Please enter a secret word.");
+                return;
+            }
+
+            const selectedCheckboxes = document.querySelectorAll('.player-checkbox:checked');
+            const selectedPlayerIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.playerId);
+
+            if (selectedPlayerIds.length === 0) {
+                showToast("Please select at least one player.");
+                return;
+            }
+
+            const gameStateRef = doc(db, `artifacts/${appId}/public/data/gameState/main`);
+            try {
+                await setDoc(gameStateRef, {
+                    secretWord: secretWord,
+                    selectedPlayerIds: selectedPlayerIds,
+                    phase: 'revealed'
+                }, { merge: true });
+            } catch (error) {
+                console.error("Error revealing word:", error);
+                showToast("Could not reveal the word.");
+            }
+        }
+        
+        // Handle resetting the game
+        async function resetGame() {
+            const gameStateRef = doc(db, `artifacts/${appId}/public/data/gameState/main`);
+            try {
+                // We set all fields to null/empty to reset the state
+                await setDoc(gameStateRef, {
+                    hostId: null,
+                    hostName: null,
+                    phase: 'lobby',
+                    secretWord: null,
+                    selectedPlayerIds: []
+                });
+                secretWordInput.value = '';
+                showToast("Game has been reset.");
+            } catch (error) {
+                console.error("Error resetting game:", error);
+                showToast("Failed to reset the game.");
+            }
+        }
+
+
+        // --- EVENT LISTENERS ---
+        joinGameBtn.addEventListener('click', joinGame);
+        playerNameInput.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') joinGame();
+        });
+        becomeHostBtn.addEventListener('click', becomeHost);
+        resetGameBtn.addEventListener('click', resetGame);
+        revealWordBtn.addEventListener('click', revealWord);
+        
+        // --- INITIALIZE ---
+        window.onload = initializeFirebase;
+
+    </script>
+</body>
+</html>
