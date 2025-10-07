@@ -29,10 +29,23 @@
             transform: scale(1.05);
             box-shadow: 0 0 15px rgba(99, 102, 241, 0.5);
         }
+        .loader {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white flex items-center justify-center min-h-screen p-4">
 
+    <!-- Lobby Modal -->
     <div id="lobby-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
         <div class="bg-gray-800 p-8 rounded-lg shadow-2xl w-full max-w-sm text-center">
             <h2 class="text-3xl font-bold mb-6 text-indigo-400">Jemalu</h2>
@@ -43,6 +56,7 @@
         </div>
     </div>
 
+    <!-- Host Name Entry Modal -->
     <div id="host-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
         <div class="bg-gray-800 p-8 rounded-lg shadow-2xl w-full max-w-sm text-center">
             <h2 class="text-2xl font-bold mb-6">Host a Game</h2>
@@ -51,6 +65,7 @@
         </div>
     </div>
 
+    <!-- Join Game Modal -->
     <div id="join-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
         <div class="bg-gray-800 p-8 rounded-lg shadow-2xl w-full max-w-sm text-center">
             <h2 class="text-2xl font-bold mb-6">Join a Game</h2>
@@ -61,6 +76,7 @@
     </div>
 
 
+    <!-- Main Game Container -->
     <div id="game-container" class="hidden w-full max-w-5xl mx-auto" data-phase="lobby">
         <div class="bg-gray-800 rounded-xl shadow-2xl p-6 md:p-8">
             <header class="flex flex-col md:flex-row justify-between items-center mb-6 border-b border-gray-700 pb-4">
@@ -72,32 +88,45 @@
             </header>
 
             <main class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Players List -->
                 <div class="md:col-span-1 bg-gray-900/50 p-4 rounded-lg">
                     <h2 id="player-list-title" class="text-xl font-semibold mb-4">Players (<span id="player-count">0</span>/20)</h2>
                     <div id="players-list" class="space-y-2 max-h-96 overflow-y-auto">
-                        </div>
+                        <!-- Player items will be injected here -->
+                    </div>
                 </div>
 
+                <!-- Game Area -->
                 <div id="game-area" class="md:col-span-2 bg-gray-900/50 p-6 rounded-lg flex flex-col items-center justify-center min-h-[300px]">
+                    <!-- Word Display -->
                     <div id="word-display-container" class="text-center">
                         <p id="game-status" class="text-gray-400 mb-4">Welcome! Waiting for a host...</p>
                         <div id="word-display" class="text-5xl md:text-7xl font-bold tracking-widest text-yellow-400 break-all"></div>
                     </div>
 
+                    <!-- Host Controls -->
                     <div id="host-controls" class="hidden w-full mt-4 space-y-4">
                         <div>
                            <label for="secret-word-input" class="block text-sm font-medium text-gray-300 mb-1">Enter Secret Word:</label>
-                           <input type="text" id="secret-word-input" class="w-full bg-gray-700 text-white p-3 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                           <div class="flex gap-2">
+                               <input type="text" id="secret-word-input" class="w-full bg-gray-700 text-white p-3 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                               <button id="generate-word-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md flex items-center justify-center transition duration-300">
+                                   <span>Generate</span>
+                               </button>
+                           </div>
                         </div>
                         <button id="reveal-word-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-md transition duration-300">Reveal Word to Selected</button>
                     </div>
 
+                    <!-- Voting Area -->
                     <div id="voting-container" class="hidden w-full text-center">
                         <h3 class="text-2xl font-bold mb-4">Who is the Spy?</h3>
                         <div id="voting-players-list" class="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                            </div>
+                            <!-- Voting buttons go here -->
+                        </div>
                     </div>
 
+                    <!-- Results Area -->
                     <div id="results-container" class="hidden w-full text-center">
                         <h3 class="text-3xl font-bold mb-4" id="results-title"></h3>
                         <p class="text-lg mb-6" id="results-subtitle"></p>
@@ -107,7 +136,7 @@
                 </div>
             </main>
 
-            <footer class="mt-6 pt-4 border-t border-gray-700 flex flex-col md:flex-row items-center justify-center gap-4">
+            <footer class="mt-6 pt-4 border-t border-gray-700 flex flex-wrap items-center justify-center gap-4">
                  <button id="become-host-btn" class="bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold py-2 px-6 rounded-md transition duration-300 disabled:bg-gray-600 disabled:cursor-not-allowed">Become Host</button>
                  <button id="auto-manage-btn" class="hidden bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-6 rounded-md transition duration-300">Auto Manage</button>
                  <button id="start-voting-btn" class="hidden bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-md transition duration-300">Start Voting</button>
@@ -116,12 +145,14 @@
         </div>
     </div>
 
+    <!-- Toast Notification -->
     <div id="toast-notification" class="hidden fixed bottom-5 right-5 bg-indigo-600 text-white py-2 px-4 rounded-lg shadow-lg"></div>
 
+    <!-- Firebase SDK -->
     <script type="module">
         // --- FIREBASE IMPORTS ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, collection, runTransaction, serverTimestamp, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- DOM ELEMENTS ---
@@ -147,6 +178,7 @@
         const resetGameBtn = document.getElementById('reset-game-btn');
         const hostControls = document.getElementById('host-controls');
         const secretWordInput = document.getElementById('secret-word-input');
+        const generateWordBtn = document.getElementById('generate-word-btn');
         const revealWordBtn = document.getElementById('reveal-word-btn');
         const gameStatus = document.getElementById('game-status');
         const wordDisplayContainer = document.getElementById('word-display-container');
@@ -160,18 +192,12 @@
         const toastNotification = document.getElementById('toast-notification');
 
         // --- FIREBASE AND APP CONFIG ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyAJ9K9fQ0ThMB7aXB6qNHr3_yLUdqJgnCM",
-            authDomain: "my-chain-reaction-game.firebaseapp.com",
-            projectId: "my-chain-reaction-game",
-            storageBucket: "my-chain-reaction-game.appspot.com",
-            messagingSenderId: "32751418407",
-            appId: "1:32751418407:web:ff8244007ef2b099d56202",
-            measurementId: "G-D6ZRG8LK2H"
-        };
-        
-        const secretWords = ["Apple", "River", "Mountain", "Telescope", "Guitar", "Sunshine", "Ocean", "Bicycle", "Library", "Dragon", "Pillow", "Whisper", "Shadow", "Coffee", "Diamond", "Rainbow", "Volcano", "Symphony", "Lighthouse", "Mirage"];
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const GEMINI_API_KEY = 'AIzaSyAEI4iMpOqIsfbSpY9lYlOKAgixUQXQ6ps';
+        const MODEL_NAME="gemini-1.5-flash-latest";
 
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'jemalu-game-default';
+        
         let db, auth;
         let userId, playerName, gameId;
         let allPlayers = [];
@@ -184,11 +210,11 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
-                onAuthStateChanged(auth, (user) => {
+                onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
                     } else {
-                        signInAnonymously(auth);
+                        await authenticateUser();
                     }
                 });
 
@@ -198,13 +224,55 @@
             }
         }
         
+        async function authenticateUser() {
+             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                 await signInWithCustomToken(auth, __initial_auth_token);
+             } else {
+                 await signInAnonymously(auth);
+             }
+        }
+
         // --- UI FLOW & GAME LOGIC ---
         function showToast(message) {
             toastNotification.textContent = message;
             toastNotification.classList.remove('hidden', 'toast');
-            void toastNotification.offsetWidth; // Trigger reflow
+            void toastNotification.offsetWidth;
             toastNotification.classList.add('toast');
         }
+
+        // --- GEMINI API FUNCTION ---
+        async function generateSecretWord() {
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${GEMINI_API_KEY}`;
+            const prompt = "Generate a single, funny, or sarcastic Malayalam word suitable for a word guessing game. Provide only the word in Malayalam script, with no English letters, translations, or explanations.";
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }]
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                const word = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                
+                if (word) {
+                    return word.trim();
+                } else {
+                    throw new Error("Could not parse a word from the API response.");
+                }
+            } catch (error) {
+                console.error("Error generating word with Gemini:", error);
+                showToast("Failed to generate a word.");
+                return null;
+            }
+        }
+
 
         async function hostGame() {
             playerName = hostNameInput.value.trim();
@@ -214,7 +282,7 @@
             gameId = Math.floor(100000 + Math.random() * 900000).toString();
             
             try {
-                const gameStateRef = doc(db, `games/${gameId}/gameState/main`);
+                const gameStateRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
                 await setDoc(gameStateRef, {
                     phase: 'lobby',
                     createdAt: serverTimestamp()
@@ -235,11 +303,11 @@
             if (!userId) return showToast("Authentication failed. Please wait.");
 
             try {
-                const gameRef = doc(db, `games/${gameId}/gameState/main`);
+                const gameRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
                 const gameDoc = await getDoc(gameRef);
                 if (!gameDoc.exists()) return showToast("Game not found.");
 
-                const playerDocRef = doc(db, `games/${gameId}/players`, userId);
+                const playerDocRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/players`, userId);
                 await setDoc(playerDocRef, { name: playerName, joinedAt: serverTimestamp() });
 
                 enterGameScreen();
@@ -260,14 +328,13 @@
         }
 
         function listenToGame() {
-            const playersCollectionRef = collection(db, `games/${gameId}/players`);
+            const playersCollectionRef = collection(db, `artifacts/${appId}/public/data/games/${gameId}/players`);
             unsubscribePlayers = onSnapshot(playersCollectionRef, (snapshot) => {
                 allPlayers = [];
                 snapshot.forEach(doc => allPlayers.push({ id: doc.id, ...doc.data() }));
-                // We call updateUI from the gameState listener, which will in turn call updatePlayersList
             });
             
-            const gameStateDocRef = doc(db, `games/${gameId}/gameState/main`);
+            const gameStateDocRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
             unsubscribeGameState = onSnapshot(gameStateDocRef, (doc) => {
                 const gameState = doc.exists() ? doc.data() : {};
                 updateUI(gameState);
@@ -283,7 +350,6 @@
 
             let playersToRender = [...allPlayers];
             
-            // If in auto-manage mode with a turn order, use that order
             if (gameState.turnOrder && gameState.turnOrder.length > 0) {
                  playerListTitle.textContent = "Turn Order";
                  playersToRender.sort((a, b) => gameState.turnOrder.indexOf(a.id) - gameState.turnOrder.indexOf(b.id));
@@ -325,7 +391,6 @@
             becomeHostBtn.disabled = !!gameState.hostId || !!gameState.autoManaged;
             resetGameBtn.classList.toggle('hidden', !isHost && !isOriginalHost);
             
-            // Auto Manage Button visibility
             if((isHost || isOriginalHost) && allPlayers.length <= 5){
                  autoManageBtn.classList.remove('hidden');
                  autoManageBtn.textContent = gameState.autoManaged ? "Next Auto Round" : "Auto Manage";
@@ -356,6 +421,12 @@
                         gameStatus.textContent = `The secret word is:`;
                         wordDisplay.textContent = gameState.secretWord;
                     }
+                    
+                    // Auto-trigger voting for auto-managed games
+                    if(gameState.autoManaged && (isHost || isOriginalHost)) {
+                        setTimeout(() => startVoting(), 3000); // Give players a moment to see the word
+                    }
+
                     break;
                 case 'voting':
                     votingContainer.classList.remove('hidden');
@@ -419,7 +490,7 @@
 
         async function becomeHost() {
             if (!userId || !playerName) return;
-            const gameStateRef = doc(db, `games/${gameId}/gameState/main`);
+            const gameStateRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
             try {
                 await runTransaction(db, async (transaction) => {
                     const gameStateDoc = await transaction.get(gameStateRef);
@@ -444,7 +515,7 @@
             const allPlayerIds = allPlayers.map(p => p.id);
             const spyIds = allPlayerIds.filter(id => id !== userId && !selectedPlayerIds.includes(id));
 
-            const gameStateRef = doc(db, `games/${gameId}/gameState/main`);
+            const gameStateRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
             try {
                 await updateDoc(gameStateRef, {
                     secretWord,
@@ -462,28 +533,32 @@
         async function toggleAutoManage() {
             if (allPlayers.length < 2) return showToast("Need at least 2 players for auto mode.");
             
+            autoManageBtn.disabled = true;
+            autoManageBtn.innerHTML = '<div class="loader"></div>';
+
+            const secretWord = await generateSecretWord();
+
+            if(!secretWord) {
+                autoManageBtn.disabled = false;
+                autoManageBtn.textContent = 'Auto Manage';
+                return; // Error toast is shown in the generate function
+            }
+
             const playerIds = allPlayers.map(p => p.id);
-            
-            // 1. Select random spy
             const spyIndex = Math.floor(Math.random() * playerIds.length);
             const spyId = playerIds[spyIndex];
 
-            // 2. Select random word
-            const wordIndex = Math.floor(Math.random() * secretWords.length);
-            const secretWord = secretWords[wordIndex];
-
-            // 3. Create shuffled turn order, ensuring spy is not first
             let turnOrder = [...playerIds].sort(() => Math.random() - 0.5);
             while(turnOrder[0] === spyId && playerIds.length > 1) {
-                turnOrder = [...playerIds].sort(() => Math.random() - 0.5);
+                turnOrder.push(turnOrder.shift());
             }
 
-            const gameStateRef = doc(db, `games/${gameId}/gameState/main`);
+            const gameStateRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
             try {
                  await updateDoc(gameStateRef, {
                     autoManaged: true,
-                    hostId: 'auto-host', // No single player is host now
-                    originalHostId: userId, // Keep track of who started this
+                    hostId: 'auto-host',
+                    originalHostId: userId,
                     hostName: 'Auto Host',
                     phase: 'revealed',
                     spyIds: [spyId],
@@ -492,20 +567,23 @@
                     votes: {},
                     results: null,
                 });
-                showToast("Auto round started! Check the new turn order.");
+                showToast("Auto round started! Check the turn order.");
             } catch (error) {
                 console.error("Error starting auto-manage:", error);
                 showToast("Could not start auto-managed game.");
+            } finally {
+                autoManageBtn.disabled = false;
+                autoManageBtn.textContent = 'Next Auto Round';
             }
         }
 
         async function startVoting() {
-            const gameStateRef = doc(db, `games/${gameId}/gameState/main`);
+            const gameStateRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
             await updateDoc(gameStateRef, { phase: 'voting' });
         }
 
         async function castVote(votedForPlayerId) {
-            const gameStateRef = doc(db, `games/${gameId}/gameState/main`);
+            const gameStateRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
             try {
                 await runTransaction(db, async (transaction) => {
                     const gameStateDoc = await transaction.get(gameStateRef);
@@ -516,12 +594,7 @@
 
                     const newVotes = { ...gameState.votes, [userId]: votedForPlayerId };
                     
-                    let totalVoters;
-                    if (gameState.autoManaged) {
-                        totalVoters = allPlayers.length;
-                    } else {
-                        totalVoters = allPlayers.length - 1;
-                    }
+                    let totalVoters = gameState.autoManaged ? allPlayers.length : allPlayers.length - 1;
 
                     if (Object.keys(newVotes).length >= totalVoters) {
                         calculateAndSetResults(gameState, newVotes, transaction, gameStateRef);
@@ -544,7 +617,7 @@
             let maxVotes = 0;
             let mostVotedPlayerIds = [];
             for (const playerId in voteCounts) {
-                if (voteCounts[playerId] > maxVotes) {
+                if(voteCounts[playerId] > maxVotes) {
                     maxVotes = voteCounts[playerId];
                     mostVotedPlayerIds = [playerId];
                 } else if (voteCounts[playerId] === maxVotes) {
@@ -577,7 +650,7 @@
         }
         
         async function resetGame() {
-            const gameStateRef = doc(db, `games/${gameId}/gameState/main`);
+            const gameStateRef = doc(db, `artifacts/${appId}/public/data/games/${gameId}/gameState/main`);
             try {
                 await updateDoc(gameStateRef, {
                     hostId: null, hostName: null, phase: 'lobby',
@@ -602,6 +675,17 @@
         revealWordBtn.addEventListener('click', revealWord);
         startVotingBtn.addEventListener('click', startVoting);
         autoManageBtn.addEventListener('click', toggleAutoManage);
+        
+        generateWordBtn.addEventListener('click', async () => {
+            generateWordBtn.disabled = true;
+            generateWordBtn.innerHTML = '<div class="loader"></div>';
+            const word = await generateSecretWord();
+            if (word) {
+                secretWordInput.value = word;
+            }
+            generateWordBtn.disabled = false;
+            generateWordBtn.innerHTML = '<span>Generate</span>';
+        });
 
         gameCodeDisplay.addEventListener('click', () => {
             navigator.clipboard.writeText(gameId).then(() => showToast('Game code copied!'));
@@ -613,3 +697,4 @@
     </script>
 </body>
 </html>
+
